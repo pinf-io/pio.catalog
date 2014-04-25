@@ -11,6 +11,7 @@ const COLORS = require("colors");
 const WAITFOR = require("waitfor");
 const COMMANDER = require("commander");
 const DEEPEQUAL = require("deep-equal");
+const DEEPMERGE = require("deepmerge");
 const DEEPCOPY = require("deepcopy");
 const CRYPTO = require("crypto");
 
@@ -249,6 +250,10 @@ exports.catalog = function(catalog) {
         aspects: {},
         descriptor: DEEPCOPY(pioConfig.config["pio.service"].descriptor) || {}
     };
+    // TODO: Remove this once config boundaries are better established.
+    if (pioConfig.config["pio.service"].config) {
+        serviceInfo.descriptor.config = DEEPMERGE(serviceInfo.descriptor.config || {}, pioConfig.config["pio.service"].config);
+    }
 
     // TODO: Get converter to adjust descriptor based on layout info?
     if (
