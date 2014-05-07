@@ -122,7 +122,7 @@ exports.publish = function(pio, state) {
             });
         }
 
-        var done = pio.API.Q.defer();
+        var done = pio.API.Q.resolve();
         for (var name in pio._config.config["pio.catalog"].catalogs) {
             done = pio.API.Q.when(done, function() {
                 return publishCatalog(name, pio._config.config["pio.catalog"].catalogs[name]);
