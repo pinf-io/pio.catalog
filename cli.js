@@ -254,6 +254,9 @@ exports.catalog = function(catalog) {
     if (pioConfig.config["pio.service"].config) {
         serviceInfo.descriptor.config = DEEPMERGE(serviceInfo.descriptor.config || {}, pioConfig.config["pio.service"].config);
     }
+    if (pioConfig.config["pio.service"]["config.plugin"]) {
+        serviceInfo.descriptor["config.plugin"] = DEEPMERGE(serviceInfo.descriptor["config.plugin"] || {}, pioConfig.config["pio.service"]["config.plugin"]);
+    }
 
     // TODO: Get converter to adjust descriptor based on layout info?
     if (
