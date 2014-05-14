@@ -257,6 +257,13 @@ exports.catalog = function(catalog) {
     if (pioConfig.config["pio.service"]["config.plugin~raw"]) {
         serviceInfo.descriptor["config.plugin"] = DEEPMERGE(serviceInfo.descriptor["config.plugin"] || {}, pioConfig.config["pio.service"]["config.plugin~raw"]);
     }
+    // TODO: This should already be merged by the time we get here.
+    if (
+        pioConfig.config["pio.service"].sourceDescriptor &&
+        pioConfig.config["pio.service"].sourceDescriptor["config.plugin"]
+    ) {
+        serviceInfo.descriptor["config.plugin"] = DEEPMERGE(pioConfig.config["pio.service"].sourceDescriptor["config.plugin"], serviceInfo.descriptor["config.plugin"] || {});
+    }
 
     // TODO: Get converter to adjust descriptor based on layout info?
     if (
