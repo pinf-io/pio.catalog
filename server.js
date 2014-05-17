@@ -13,14 +13,18 @@ exports.main = function(callback) {
 	    var ownConfig = JSON.parse(FS.readFileSync(PATH.join(__dirname, "../.pio.json")));
 
 	    ASSERT.equal(typeof ownConfig.config["pio.service.deployment"].env.PIO_SERVICE_DATA_BASE_PATH, "string");
-	    ASSERT.equal(typeof ownConfig.env.AWS_ACCESS_KEY, "string");
-	    ASSERT.equal(typeof ownConfig.env.AWS_SECRET_KEY, "string");
 	    ASSERT.equal(typeof ownConfig.config.server.allow, "object");
 
-	    var awsS3 = (new AWS.S3({
-	        accessKeyId: ownConfig.env.AWS_ACCESS_KEY,
-	        secretAccessKey: ownConfig.env.AWS_SECRET_KEY
-	    }));
+	    var awsS3 = null;
+	    if (
+	    	ownConfig.env.AWS_ACCESS_KEY &&
+	    	ownConfig.env.AWS_SECRET_KEY
+	    ) {
+		    awsS3 = (new AWS.S3({
+		        accessKeyId: ownConfig.env.AWS_ACCESS_KEY,
+		        secretAccessKey: ownConfig.env.AWS_SECRET_KEY
+		    }));
+	    }
 
 	    var app = EXPRESS();
 
@@ -32,7 +36,30 @@ exports.main = function(callback) {
 	        app.use(app.router);
 	    });
 
+		// This is a standard route to echo a value specified as a query argument
+		// back as a session cookie.
+		// TODO: Standardize a route such as this.
+	    app.get("/.set-session-cookie", function (req, res, next) {
+            if (req.query.sid) {
+                res.writeHead(204, {
+                    'Set-Cookie': 'x-pio-server-sid=' + req.query.sid,
+                    'Content-Type': 'text/plain',
+                    'Content-Length': "0"
+                });
+                return res.end();
+            }
+            return next();
+        });
+
 	    app.get("/catalog/:name/:checksum", function (req, res, next) {
+
+	    	if (!awsS3) {
+                res.writeHead(204, {
+                    'Content-Type': 'text/plain',
+                    'Content-Length': "0"
+                });
+                return res.end();
+	    	}
 
 	    	function isAllowed(callback) {
 	    		for (var alias in ownConfig.config.server.allow) {
