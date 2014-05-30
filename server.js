@@ -63,7 +63,7 @@ exports.main = function(callback) {
 
 	    	function isAllowed(callback) {
 	    		for (var alias in ownConfig.config.server.allow) {
-	    			if (ownConfig.config.server.allow[alias].key === req.headers["x-auth-code"]) {
+	    			if (ownConfig.config.server.allow[alias].key === req.headers["x-pio.catalog-key"]) {
 	    				return callback(null, ownConfig.config.server.allow[alias]);
 	    			}
 	    		}
