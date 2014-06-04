@@ -88,7 +88,7 @@ exports.main = function(callback) {
 			    		});
 			    		for (var packageId in catalog.packages) {
 			    			for (var aspect in catalog.packages[packageId].aspects) {
-			    				if (allowedConfig.aspects.indexOf(aspect) === -1) {
+			    				if (allowedConfig.aspects.indexOf(aspect.replace(/\[[^\]]+\]$/, "")) === -1) {
 			    					delete catalog.packages[packageId].aspects[aspect];
 			    					continue;
 			    				}

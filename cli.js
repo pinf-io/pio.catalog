@@ -143,6 +143,13 @@ exports.catalog = function(catalog) {
         return cacheUri;
     }
 
+    function platformifyAspectName(type) {
+        if (type === "build") {
+            return type + "[platform=" + process.platform + "&arch=" + process.arch + "]";
+        }
+        return type;
+    }
+
 
     function catalogType(type) {
 
@@ -282,7 +289,7 @@ exports.catalog = function(catalog) {
     ].forEach(function(type) {
         all.push(catalogType(type).then(function(uri) {
             if (uri) {
-                serviceInfo.aspects[type] = "https://s3.amazonaws.com/" + uri;
+                serviceInfo.aspects[platformifyAspectName(type)] = "https://s3.amazonaws.com/" + uri;
             }
             return;
         }));
