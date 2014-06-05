@@ -63,6 +63,7 @@ exports.catalog = function(catalog) {
     var pioConfig = JSON.parse(FS.readFileSync(PATH.join(process.env.PIO_SERVICE_PATH, "live/.pio.json")));
 
     ASSERT.equal(typeof pioConfig.config["pio.service"].id, "string");
+    ASSERT.equal(typeof pioConfig.config["pio.service"].originalChecksum, "string");
     ASSERT.equal(typeof pioConfig.config["pio.service"].finalChecksum, "string");
     ASSERT.equal(typeof pioConfig.config["pio.service"].uuid, "string");
     ASSERT.equal(typeof pioConfig.config["pio"].serviceRepositoryUri, "string");
@@ -252,7 +253,8 @@ exports.catalog = function(catalog) {
 
     var serviceInfo = {
         uuid: pioConfig.config["pio.service"].uuid,
-        checksum: pioConfig.config["pio.service"].finalChecksum,
+        originalChecksum: pioConfig.config["pio.service"].originalChecksum,
+        finalChecksum: pioConfig.config["pio.service"].finalChecksum,
         timestamp: Date.now(),
         aspects: {},
         descriptor: DEEPCOPY(pioConfig.config["pio.service"].descriptor) || {}
@@ -335,7 +337,7 @@ exports.publish = function(catalogName) {
             ownConfig.config["pio.service.deployment"].env.PIO_SERVICE_DATA_BASE_PATH,
             catalogName,
             id,
-            requestedEntry.checksum,
+            requestedEntry.finalChecksum,
             false
         );
         return FS.exists(catalogEntryCachePath, function(exists) {
@@ -346,11 +348,11 @@ exports.publish = function(catalogName) {
                 if (err) return callback(err);
                 if (
                     cachedEntry.uuid !== requestedEntry.uuid ||
-                    cachedEntry.checksum !== requestedEntry.checksum ||
+                    cachedEntry.finalChecksum !== requestedEntry.finalChecksum ||
                     cachedEntry.timestamp !== requestedEntry.timestamp
                 ) {
                     console.error(cachedEntry.uuid, requestedEntry.uuid);
-                    console.error(cachedEntry.checksum, requestedEntry.checksum);
+                    console.error(cachedEntry.finalChecksum, requestedEntry.finalChecksum);
                     return callback(new Error("Catalog cache entry at path '" + catalogEntryCachePath + "' does not match requested entry: " + JSON.stringify(requestedEntry)));
                 }
                 return callback(null, cachedEntry);
@@ -409,7 +411,7 @@ exports.publish = function(catalogName) {
                 ];
                 for (var id in catalog.packages) {
                     key.push(catalog.packages[id].uuid);
-                    key.push(catalog.packages[id].checksum);
+                    key.push(catalog.packages[id].finalChecksum);
                 }
                 var shasum = CRYPTO.createHash("sha1");
                 shasum.update(key.join(":"));

@@ -102,7 +102,8 @@ exports["publish.finalize"] = function(pio, states) {
 					var service = statesById[serviceIdParts[1]]["pio.catalog"].catalogs[catalogName].services[serviceIdParts[1]];
 					payload.packages[serviceIdParts[1]] = {
 						uuid: service.uuid,
-						checksum: service.checksum,
+						originalChecksum: service.originalChecksum,
+						finalChecksum: service.finalChecksum,
 						timestamp: service.timestamp
 					};
 					if (!payload.services[serviceIdParts[0]]) {
