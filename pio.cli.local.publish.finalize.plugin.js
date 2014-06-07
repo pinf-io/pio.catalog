@@ -130,6 +130,14 @@ exports["publish.finalize"] = function(pio, states) {
 
 	                console.log(("Published catalog to: " + JSON.stringify(res.objects.catalogUrl, null, 4)).cyan);
 
+	                console.log(("Catalog info: " + JSON.stringify({
+						name: payload.name,
+						uuid: payload.uuid,
+						revision: payload.revision,
+						id: PATH.basename(res.objects.catalogUrl),
+						url: res.objects.catalogUrl
+	                }, null, 4)).cyan);
+
 	                response.catalogs[catalogName].url = res.objects.catalogUrl;
 
 	                return;
