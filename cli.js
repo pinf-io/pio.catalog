@@ -363,19 +363,18 @@ exports.publish = function(catalogName) {
     function buildCatalog(payload) {
         try {
 
-            ASSERT.equal(typeof payload.name, "string");
-            ASSERT.equal(typeof payload.uuid, "string");
-            ASSERT.notEqual(typeof payload.revision, "undefined");
-            ASSERT.equal(typeof payload.env, "object");
-            ASSERT.equal(typeof payload.config, "object");
-            ASSERT.equal(typeof payload.services, "object");
+            ASSERT.equal(typeof payload.name, "string", "'payload.name not set in catalog!'");
+            ASSERT.equal(typeof payload.uuid, "string", "'payload.uuid not set in catalog!'");
+            ASSERT.notEqual(typeof payload.revision, "undefined", "'payload.revision not set in catalog!'");
+            ASSERT.equal(typeof payload.config, "object", "'payload.config not set in catalog!'");
+            ASSERT.equal(typeof payload.services, "object", "'payload.services not set in catalog!'");
 
             var catalog = {
                 name: payload.name,
                 uuid: payload.uuid,
                 revision: payload.revision,
                 packages: {},
-                env: payload.env,
+                env: payload.env || {},
                 config: payload.config,
                 services: payload.services
             };
