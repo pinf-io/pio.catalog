@@ -97,7 +97,8 @@ exports.main = function(callback) {
 				    				uri = uri.replace(/^https:\/\/s3\.amazonaws\.com\//, "");
 				    				return awsS3.getSignedUrl("getObject", {
 						                Bucket: uri.split("/").shift(),
-						                Key: uri.split("/").slice(1).join("/")
+						                Key: uri.split("/").slice(1).join("/"),
+						                Expires: 60 * 60 * 24 * 3  // 3 days
 						            }, function(err, url) {
 						            	if (err) return done(err);
 						            	catalog.packages[packageId].aspects[aspect] = url;
