@@ -67,8 +67,8 @@ exports.catalog = function(catalog) {
     ASSERT.equal(typeof pioConfig.config["pio.service"].finalChecksum, "string");
     ASSERT.equal(typeof pioConfig.config["pio.service"].uuid, "string");
     ASSERT.equal(typeof pioConfig.config["pio"].serviceRepositoryUri, "string");
-    ASSERT.equal(typeof pioConfig.config["pio.service.deployment"].env.AWS_ACCESS_KEY, "string");
-    ASSERT.equal(typeof pioConfig.config["pio.service.deployment"].env.AWS_SECRET_KEY, "string");
+    ASSERT.equal(typeof pioConfig.config["pio.service.deployment"].env.AWS_ACCESS_KEY, "string", 'env.AWS_ACCESS_KEY must be set!');
+    ASSERT.equal(typeof pioConfig.config["pio.service.deployment"].env.AWS_SECRET_KEY, "string", 'env.AWS_SECRET_KEY must be set!');
 
     var syncServicePath = FS.realpathSync(PATH.join(process.env.PIO_SERVICE_PATH, "sync"));
     var liveServicePath = FS.realpathSync(PATH.join(process.env.PIO_SERVICE_PATH, "live"));
