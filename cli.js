@@ -109,21 +109,35 @@ exports.catalog = function(catalog) {
     }
 
     function upload(archivePath, cacheUri, callback) {
-        var uploader = S3.createClient({
-            key: pioConfig.config["pio.service.deployment"].env.AWS_ACCESS_KEY,
-            secret: pioConfig.config["pio.service.deployment"].env.AWS_SECRET_KEY,
-            bucket: cacheUri.split("/").shift()
-        }).upload(archivePath, cacheUri.split("/").slice(1).join("/"), {
-            'Content-Type': 'application/x-tar',
-            'x-amz-acl': 'private'
-        });
-        uploader.on('error', callback);
-        uploader.on('progress', function(amountDone, amountTotal) {
-            console.log("upload progress", amountDone, amountTotal);
-        });
-        return uploader.on('end', function(url) {
-            return callback(null);
-        });
+        function attempt(count, callback) {
+            var uploader = S3.createClient({
+                key: pioConfig.config["pio.service.deployment"].env.AWS_ACCESS_KEY,
+                secret: pioConfig.config["pio.service.deployment"].env.AWS_SECRET_KEY,
+                bucket: cacheUri.split("/").shift()
+            }).upload(archivePath, cacheUri.split("/").slice(1).join("/"), {
+                'Content-Type': 'application/x-tar',
+                'x-amz-acl': 'private'
+            });
+            uploader.on('error', function(err) {
+                console.error("err", err);
+                console.error("err.message", err.message);
+                console.error("err.code", err.code);
+                if (count < 5) {
+                    console.log("Trying again in 3 seconds ...");
+                    return setTimeout(function() {
+                        return attempt(count + 1, callback);
+                    }, 3 * 1000);
+                }
+                return callback(err);
+            });
+            uploader.on('progress', function(amountDone, amountTotal) {
+                console.log("upload progress", amountDone, amountTotal);
+            });
+            return uploader.on('end', function(url) {
+                return callback(null);
+            });
+        }
+        return attempt(1, callback);
     }
 
     function cacheUriForType(type) {
