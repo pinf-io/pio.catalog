@@ -106,13 +106,22 @@ exports.publish = function(pio, state) {
                     if (state["pio.cli.local"].force) {
                         commands.push('export PIO_FORCE=' + state["pio.cli.local"].force);
                     }
+                    if (state["pio.cli.local"].verbose) {
+                        commands.push('export PIO_VERBOSE=' + state["pio.cli.local"].verbose);
+                    }
+                    if (state["pio.cli.local"].debug) {
+                        commands.push('export PIO_DEBUG=' + state["pio.cli.local"].debug);
+                    }
                     commands.push("pio-catalog record " + catalogName);
 
                     return pio._state["pio.deploy"]._call("_runCommands", {
                         commands: commands,
                         cwd: PATH.join(state["pio.service.deployment"].path, "live")
                     }).then(function(res) {
-                        if (res !== null && res.code !== 0) {
+                        if (res === null) {
+                            throw new Error("Remote commands exited with null");
+                        }
+                        if (res.code !== 0) {
                             throw new Error("Remote commands exited with code: " + res.code);
                         }
                         response.catalogs[catalogName].services[state["pio.service"].id] = res.objects.entry;

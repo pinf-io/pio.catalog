@@ -2,7 +2,10 @@
 
 const ASSERT = require("assert");
 const PATH = require("path");
-const FS = require("fs-extra");
+const MFS = require("mfs");
+const FS = new MFS.FileFS({
+    lineinfo: true
+});
 const Q = require("q");
 const S3 = require("s3");
 const AWS = require("aws-sdk");
@@ -52,7 +55,7 @@ function getCatalogCachePath(dataBasePath, catalogName, catalogChecksum, latest)
 }
 
 
-exports.catalog = function(catalog) {
+exports.catalog = function(catalog, options) {
 
     var ownConfig = JSON.parse(FS.readFileSync(PATH.join(__dirname, "../.pio.json")));
 
@@ -140,11 +143,131 @@ exports.catalog = function(catalog) {
         return attempt(1, callback);
     }
 
-    function cacheUriForType(type) {
+    function getDirHash(path, callback) {
+
+        console.log("getDirHash(" + path + ")");
+
+        // TODO: Replace this checksum logic with 1) meta data if available 2) better scanning that does not load files into memory.
+
+        // ----------------
+        // @source https://github.com/mcavage/node-dirsum/blob/master/lib/dirsum.js
+        // Changes:
+        //  * Do not die on non-existent symlink.
+        //  * Bugfixes.
+        // TODO: Contribute back to author.
+        function _summarize(method, hashes) {
+          var keys = Object.keys(hashes);
+          keys.sort();
+
+          var obj = {};
+          obj.files = hashes;
+          var hash = CRYPTO.createHash(method);
+          for (var i = 0; i < keys.length; i++) {
+            if (typeof(hashes[keys[i]]) === 'string') {
+              hash.update(hashes[keys[i]]);
+            } else if (typeof(hashes[keys[i]]) === 'object') {
+              hash.update(hashes[keys[i]].hash);
+            } else {
+              console.error('Unknown type found in hash: ' + typeof(hashes[keys[i]]));
+            }
+          }
+
+          obj.hash = hash.digest('hex');
+          return obj;
+        }
+
+        function digest(root, method, callback) {
+            try {
+              if (!root || typeof(root) !== 'string') {
+                throw new TypeError('root is required (string)');
+              }
+              if (method) {
+                if (typeof(method) === 'string') {
+                  // NO-OP
+                } else if (typeof(method) === 'function') {
+                  callback = method;
+                  method = 'md5';
+                } else {
+                  throw new TypeError('hash must be a string');
+                }
+              } else {
+                throw new TypeError('callback is required (function)');
+              }
+              if (!callback) {
+                throw new TypeError('callback is required (function)');
+              }
+
+              var hashes = {};
+
+              FS.readdir(root, function(err, files) {
+                if (err) return callback(err);
+
+                if (files.length === 0) {
+                  return callback(undefined, {hash: '', files: {}});
+                }
+                var hashed = 0;
+                files.forEach(function(f) {
+                  var path = root + '/' + f;
+                  FS.stat(path, function(err, stats) {
+                    if (err) {
+                        if (err.code === "ENOENT") {
+                            // We have a symlink that points to target that does not exist.
+                            hashes[f] = "na";
+                            if (++hashed >= files.length) {
+                              return callback(undefined, _summarize(method, hashes));
+                            }
+                            return;
+                        }
+                        return callback(err);
+                    }
+                    if (stats.isDirectory()) {
+                      return digest(path, method, function(err, hash) {
+                        if (err) return callback(err);
+
+                        hashes[f] = hash;
+                        if (++hashed >= files.length) {
+                          return callback(undefined, _summarize(method, hashes));
+                        }
+                      });
+                    } else if (stats.isFile()) {
+                      FS.readFile(path, 'utf8', function(err, data) {
+                        if (err) return callback(err);
+
+                        var hash = CRYPTO.createHash(method);
+                        hash.update(data);
+                        hashes[f] = hash.digest('hex');
+
+                        if (++hashed >= files.length) {
+                          return callback(undefined, _summarize(method, hashes));
+                        }
+                      });
+                    } else {
+                      console.error('Skipping hash of %s', f);
+                      if (++hashed > files.length) {
+                        return callback(undefined, _summarize(method, hashes));
+                      }
+                    }
+                  });
+                });
+              });
+            } catch (err) {
+                return callback(err);
+            }
+        }
+        // ----------------
+
+        return digest(path, "sha1", function (err, info) {
+            if (err) return callback(err);
+            return callback(null, info.hash);
+        });
+    }
+
+    function cacheUriForType(sourcHash, type) {
         var cacheUri = 
             pioConfig.config["pio"].serviceRepositoryUri + "/" +
             pioConfig.config["pio.service"].id + "-" +
             pioConfig.config["pio.service"].finalChecksum.substring(0, 7) + "-" +
+            sourcHash.substring(0, 7) + "-" +
             type;
         if (type === "build") {
             cacheUri += "-" + process.platform + "-" + process.arch
@@ -170,45 +293,63 @@ exports.catalog = function(catalog) {
 
         console.log("Cataloging for type: " + type);
 
-        var cacheUri = cacheUriForType(type);
-
         var sourcePath = PATH.join(syncServicePath, type);
         if (!FS.existsSync(sourcePath)) {
             sourcePath = PATH.join(liveServicePath, type);
         }
 
-        var archivePath = sourcePath + ".tgz";
+        if (!FS.existsSync(sourcePath)) {
+            return Q.resolve(null);
+        }
 
-        return Q.denodeify(exists)(cacheUri).then(function(exists) {
-            if (exists) {
-                console.log(("Skip creating archive and upload for '" + sourcePath + "'. Already uploaded!").yellow);
-                return cacheUri;
-            }
+        return Q.denodeify(getDirHash)(sourcePath).then(function (sourcHash) {
 
-            if (!FS.existsSync(sourcePath)) {
-                console.log(("Skip creating archive and upload for '" + sourcePath + "'. Path does not exist!").yellow);
-                return null;
-            }
+            var cacheUri = cacheUriForType(sourcHash, type);
 
-            console.log(("Creating archive '" + archivePath + "' from '" + sourcePath + "'").magenta);
+            var archivePath = sourcePath + ".tgz";
 
-            return Q.denodeify(function(callback) {
-                return EXEC('tar --dereference -zcf "' + PATH.basename(archivePath) + '" -C "' + PATH.dirname(sourcePath) + '/" "' + PATH.basename(sourcePath) + '"', {
-                    cwd: PATH.dirname(archivePath)
-                }, function(err, stdout, stderr) {
-                    if (err) {
-                        process.stderr.write(stdout);
-                        process.stderr.write(stderr);
-                        return callback(err);
+            return Q.denodeify(exists)(cacheUri).then(function(exists) {
+                if (exists) {
+                    if (options.force) {
+                        console.log(("Skip creating archive and upload for '" + sourcePath + "'. Already uploaded! BUT SKIP DUE TO FORCE.").yellow);
+                    } else {
+                        console.log(("Skip creating archive and upload for '" + sourcePath + "'. Already uploaded!").yellow);
+                        return cacheUri;
                     }
-                    console.log("Archive created. Uploading to S3.".magenta);
-                    return callback(null);
-                });
-            })().then(function() {
-                console.log(("Uploading archive '" + archivePath + "' to '" + cacheUri + "'").magenta);
-                return Q.denodeify(upload)(archivePath, cacheUri).then(function() {
-                    console.log("Uploaded archive to: " + cacheUri);
-                    return cacheUri;
+                }
+
+                if (!FS.existsSync(sourcePath)) {
+                    console.log(("Skip creating archive and upload for '" + sourcePath + "'. Path does not exist!").yellow);
+                    return null;
+                }
+
+                console.log(("Creating archive '" + archivePath + "' from '" + sourcePath + "'").magenta);
+
+                if (FS.existsSync(archivePath)) {
+                    FS.unlinkSync(archivePath);
+                }
+
+                return Q.denodeify(function(callback) {
+                    var command = '/bin/tar --dereference -zcf "' + PATH.basename(archivePath) + '" -C "' + PATH.dirname(sourcePath) + '/" "' + PATH.basename(sourcePath) + '"';
+                    console.log("Running command: " + command + " (cwd: " + PATH.dirname(archivePath) + ")");
+                    return EXEC(command, {
+                        cwd: PATH.dirname(archivePath)
+                    }, function(err, stdout, stderr) {
+                        if (err) {
+                            console.error("Error creating archive:", err.stack);
+                            process.stderr.write(stdout);
+                            process.stderr.write(stderr);
+                            return callback(err);
+                        }
+                        console.log("Archive created. Uploading to S3.".magenta);
+                        return callback(null);
+                    });
+                })().then(function() {
+                    console.log(("Uploading archive '" + archivePath + "' to '" + cacheUri + "'").magenta);
+                    return Q.denodeify(upload)(archivePath, cacheUri).then(function() {
+                        console.log("Uploaded archive to: " + cacheUri);
+                        return cacheUri;
+                    });
                 });
             });
         });
@@ -298,24 +439,27 @@ exports.catalog = function(catalog) {
     }
 
     var all = [];
+    var done = Q.resolve();
     [
         "scripts",
         "source",
         "build"
     ].forEach(function(type) {
-        all.push(catalogType(type).then(function(uri) {
-            if (uri) {
-                serviceInfo.aspects[platformifyAspectName(type)] = "https://s3.amazonaws.com/" + uri;
-            }
-            return;
-        }));
+        done = Q.when(done, function() {
+            return catalogType(type).then(function(uri) {
+                if (uri) {
+                    serviceInfo.aspects[platformifyAspectName(type)] = "https://s3.amazonaws.com/" + uri;
+                }
+                return;
+            });
+        });
     });
-    return Q.all(all).then(function() {
+    return Q.when(done).then(function() {
         return Q.denodeify(recordInCatalog)(serviceInfo);
     });
 }
 
-exports.publish = function(catalogName) {
+exports.publish = function(catalogName, options) {
 
     var ownConfig = JSON.parse(FS.readFileSync(PATH.join(__dirname, "../.pio.json")));
 
@@ -408,7 +552,12 @@ exports.publish = function(catalogName) {
 
     function saveCatalog(path, catalog) {
         console.log(("Save catalog at: " + path).magenta);
-        return Q.denodeify(FS.outputFile)(path, JSON.stringify(catalog, null, 4));
+        var deferred = Q.defer();
+        FS.outputFile(path, JSON.stringify(catalog, null, 4), function (err) {
+            if (err) return deferred.reject(err);
+            return deferred.resolve();
+        });
+        return deferred.promise;
     }
 
     return readPayload().then(function(payload) {
@@ -492,6 +641,19 @@ if (require.main === module) {
 
             var program = new COMMANDER.Command();
 
+            var options = {
+                force: process.env.PIO_FORCE || false,
+                verbose: process.env.PIO_VERBOSE || false,
+                debug: process.env.PIO_VERBOSE || process.env.PIO_DEBUG || false,
+                silent: process.env.PIO_SILENT || false
+            };
+
+            if (options.debug) {
+                FS.on("used-path", function(path, method, meta) {
+                    console.log("[pio.catalog] FS." + method, path, "(" + meta.file + " @ " + meta.line + ")");
+                });
+            }
+
             var acted = false;
 
             program
@@ -499,7 +661,7 @@ if (require.main === module) {
                 .description("Write the catalog entry for the live revision of a service.")
                 .action(function(catalog) {
                     acted = true;
-                    return exports.catalog(catalog).then(function() {
+                    return exports.catalog(catalog, options).then(function() {
                         return callback(null);
                     }).fail(callback);
                 });
@@ -509,7 +671,7 @@ if (require.main === module) {
                 .description("Publish a catalog for consumption by users.")
                 .action(function(catalog) {
                     acted = true;
-                    return exports.publish(catalog).then(function() {
+                    return exports.publish(catalog, options).then(function() {
                         return callback(null);
                     }).fail(callback);
                 });
