@@ -410,6 +410,7 @@ exports.catalog = function(catalog, options) {
         uuid: pioConfig.config["pio.service"].uuid,
         originalChecksum: pioConfig.config["pio.service"].originalChecksum,
         finalChecksum: pioConfig.config["pio.service"].finalChecksum,
+        syncInfo: pioConfig.config["pio.service"].syncInfo || null,
         timestamp: Date.now(),
         aspects: {},
         descriptor: DEEPCOPY(pioConfig.config["pio.service"].descriptor) || {}
