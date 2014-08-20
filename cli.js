@@ -121,23 +121,46 @@ exports.catalog = function(catalog, options) {
                 'Content-Type': 'application/x-tar',
                 'x-amz-acl': 'private'
             });
-            uploader.on('error', function(err) {
-                console.error("err", err);
-                console.error("err.message", err.message);
-                console.error("err.code", err.code);
+            function retry (callback) {
                 if (count < 5) {
                     console.log("Trying again in 3 seconds ...");
                     return setTimeout(function() {
                         return attempt(count + 1, callback);
                     }, 3 * 1000);
+                } else {
+                    console.log("Too many retry attempts!");
                 }
-                return callback(err);
+                return false;
+            }
+            uploader.on('error', function(err) {
+                if (!callback) return;
+                console.error("err", err);
+                console.error("err.message", err.message);
+                console.error("err.code", err.code);
+                if (retry(callback) === false) {
+                    return callback(err);
+                }
             });
+            var pingTimer = null;
             uploader.on('progress', function(amountDone, amountTotal) {
+                if (pingTimer) {
+                    clearTimeout(pingTimer);
+                }
+                pingTimer = setTimeout(function () {
+                    console.log("Kill upload and retry. Seems to be stuk.");
+                    pingTimer = null;                    
+                    retry(callback);
+                    callback = null;
+                }, 5 * 1000);
                 console.log("upload progress", amountDone, amountTotal);
             });
             return uploader.on('end', function(url) {
-                return callback(null);
+                if (pingTimer) {
+                    clearTimeout(pingTimer);
+                }
+                if (callback) {
+                    return callback(null);
+                }
             });
         }
         return attempt(1, callback);
