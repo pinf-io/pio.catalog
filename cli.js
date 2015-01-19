@@ -88,7 +88,7 @@ exports.catalog = function(catalog, options) {
         }, function (err, response) {
             console.log("response", response);
             if (err) {
-                console.log("err.statusCode", err.statusCode);
+                console.log("err.statusCode", err.statusCode, "cacheUri", cacheUri);
                 console.log("err.message", err.message);
                 if (err.statusCode === 404) {
                     return callback(null, false);

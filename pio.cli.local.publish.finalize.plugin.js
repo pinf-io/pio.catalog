@@ -70,6 +70,8 @@ exports["publish.finalize"] = function(pio, states) {
 					].join(""),
 					packages: {},
 					env: pio.API.DEEPCOPY(pio._configOriginal.env),
+// NOTE: This must NOT be enabled again. Mappings MUST come from extending other descruptors using overlays (not by providing mappings in catalogs!)
+//					mappings: pio.API.DEEPMERGE(pio.API.DEEPCOPY(pio._configOriginal.mappings), catalogConfig.mappings || {}),
 					config: pio.API.DEEPMERGE(pio.API.DEEPCOPY(pio._configOriginal.config), catalogConfig.config || {}),
 					services: {}
 				};
